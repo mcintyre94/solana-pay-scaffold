@@ -1,31 +1,41 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
-import { Cluster, clusterApiUrl, Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js'
-import type { NextApiRequest, NextApiResponse } from 'next'
+import {
+  Cluster,
+  clusterApiUrl,
+  Connection,
+  PublicKey,
+  Transaction,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+  Keypair,
+} from "@solana/web3.js";
+import type { NextApiRequest, NextApiResponse } from "next";
+import base58 from "bs58";
 
 type GetResponse = {
-  label: string,
-  icon: string,
+  label: string;
+  icon: string;
 };
 
 export type PostRequest = {
-  account: string,
+  account: string;
 };
 
 export type PostResponse = {
-  transaction: string,
-  message: string,
-  network: Cluster,
+  transaction: string;
+  message: string;
+  network: Cluster;
 };
 
 export type PostError = {
-  error: string
+  error: string;
 };
 
 // Response for GET request
 function get(res: NextApiResponse<GetResponse>) {
   res.status(200).json({
-    label: 'My Store',
-    icon: 'https://solanapay.com/src/img/branding/Solanapay.com/downloads/gradient.svg',
+    label: "My Store",
+    icon: "https://solanapay.com/src/img/branding/Solanapay.com/downloads/gradient.svg",
   });
 }
 
@@ -33,17 +43,19 @@ function get(res: NextApiResponse<GetResponse>) {
 async function postImpl(
   network: Cluster,
   account: PublicKey,
-  reference: PublicKey
+  reference: PublicKey,
+  walletKeypair: Keypair
 ): Promise<PostResponse> {
   // Can also use a custom RPC here
   const endpoint = clusterApiUrl(network);
   const connection = new Connection(endpoint);
 
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash();
 
   // Create any transaction
   const transaction = new Transaction({
-    feePayer: account,
+    feePayer: walletKeypair.publicKey,
     blockhash,
     lastValidBlockHeight,
   });
@@ -64,29 +76,29 @@ async function postImpl(
 
   transaction.add(transferInstruction);
 
+  // Partially sign the transaction as walletKeypair
+  transaction.sign(walletKeypair);
+
   // Serialize the transaction and convert to base64 to return it
   const serializedTransaction = transaction.serialize({
-    requireAllSignatures: false // account is a missing signature
+    requireAllSignatures: false, // account is a missing signature
   });
-  const base64 = serializedTransaction.toString('base64');
+  const base64 = serializedTransaction.toString("base64");
 
   // Return the serialized transaction
   return {
     transaction: base64,
-    message: 'Thankyou for your purchase!',
+    message: "Thankyou for your purchase!",
     network,
   };
 }
 
 // We pass eg. network in query params, this function extracts the value of a query param
-function getFromQuery(
-  req: NextApiRequest,
-  field: string
-): string | undefined {
+function getFromQuery(req: NextApiRequest, field: string): string | undefined {
   if (!(field in req.query)) return undefined;
 
   const value = req.query[field];
-  if (typeof value === 'string') return value;
+  if (typeof value === "string") return value;
   // value is string[]
   if (value.length === 0) return undefined;
   return value[0];
@@ -96,35 +108,46 @@ async function post(
   req: NextApiRequest,
   res: NextApiResponse<PostResponse | PostError>
 ) {
-  const { account } = req.body as PostRequest
-  console.log(req.body)
+  const walletPrivateKey = process.env.WALLET_PRIVATE_KEY;
+  if (!walletPrivateKey) {
+    res.status(500).json({ error: "WALLET_PRIVATE_KEY not set" });
+    return;
+  }
+
+  const { account } = req.body as PostRequest;
+  console.log(req.body);
   if (!account) {
-    res.status(400).json({ error: 'No account provided' })
-    return
+    res.status(400).json({ error: "No account provided" });
+    return;
   }
 
-  const network = getFromQuery(req, 'network') as Cluster;
+  const network = getFromQuery(req, "network") as Cluster;
   if (!network) {
-    res.status(400).json({ error: 'No network provided' });
-    return
+    res.status(400).json({ error: "No network provided" });
+    return;
   }
 
-  const reference = getFromQuery(req, 'reference');
+  const reference = getFromQuery(req, "reference");
   if (!reference) {
-    res.status(400).json({ error: 'No reference provided' })
-    return
+    res.status(400).json({ error: "No reference provided" });
+    return;
   }
 
   try {
+    const walletKeypair = Keypair.fromSecretKey(
+      base58.decode(walletPrivateKey)
+    );
+
     const postResponse = await postImpl(
       network,
       new PublicKey(account),
       new PublicKey(reference),
+      walletKeypair
     );
-    res.status(200).json(postResponse)
+    res.status(200).json(postResponse);
   } catch (error) {
-    console.error(error)
-    res.status(500).json({ error: 'Error creating transaction' })
+    console.error(error);
+    res.status(500).json({ error: "Error creating transaction" });
   }
 }
 
@@ -132,11 +155,11 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<GetResponse | PostResponse | PostError>
 ) {
-  if (req.method === 'GET') {
+  if (req.method === "GET") {
     return get(res);
-  } else if (req.method === 'POST') {
+  } else if (req.method === "POST") {
     return await post(req, res);
   } else {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 }
