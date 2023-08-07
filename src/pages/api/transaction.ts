@@ -1,5 +1,5 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
-import { Cluster, clusterApiUrl, Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js'
+import { Cluster, clusterApiUrl, Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair, TransactionMessage, VersionedTransaction } from '@solana/web3.js'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 type GetResponse = {
@@ -39,14 +39,9 @@ async function postImpl(
   const endpoint = clusterApiUrl(network);
   const connection = new Connection(endpoint);
 
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
   // Create any transaction
-  const transaction = new Transaction({
-    feePayer: account,
-    blockhash,
-    lastValidBlockHeight,
-  });
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
   const transferInstruction = SystemProgram.transfer({
     fromPubkey: account,
@@ -62,13 +57,17 @@ async function postImpl(
     isWritable: false,
   });
 
-  transaction.add(transferInstruction);
+  const transactionMessage = new TransactionMessage({
+    payerKey: account,
+    instructions: [transferInstruction],
+    recentBlockhash: blockhash
+  }).compileToV0Message();
+
+  const transaction = new VersionedTransaction(transactionMessage);
 
   // Serialize the transaction and convert to base64 to return it
-  const serializedTransaction = transaction.serialize({
-    requireAllSignatures: false // account is a missing signature
-  });
-  const base64 = serializedTransaction.toString('base64');
+  const serializedTransaction = transaction.serialize();
+  const base64 = Buffer.from(serializedTransaction).toString('base64');
 
   // Return the serialized transaction
   return {
