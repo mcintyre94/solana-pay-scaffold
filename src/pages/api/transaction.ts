@@ -1,4 +1,5 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
+import { createTransferCheckedInstruction, getAssociatedTokenAddress, getAssociatedTokenAddressSync, getMint, transferChecked, transferCheckedInstructionData } from '@solana/spl-token';
 import { Cluster, clusterApiUrl, Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -48,11 +49,23 @@ async function postImpl(
     lastValidBlockHeight,
   });
 
-  const transferInstruction = SystemProgram.transfer({
-    fromPubkey: account,
-    toPubkey: Keypair.generate().publicKey,
-    lamports: LAMPORTS_PER_SOL / 1000,
-  });
+  const shopPublicKey = new PublicKey('EkMGcCfkrs4Eqrd9C4CEhPDRY2Es8SPQs6cGWiBYVKzt');
+  const usdcMintAddress = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+  const shopUsdcAddress = getAssociatedTokenAddressSync(usdcMintAddress, shopPublicKey);
+  const accountUsdcAddress = getAssociatedTokenAddressSync(usdcMintAddress, account);
+
+  const { decimals } = await getMint(connection, usdcMintAddress)
+
+  const usdcAmount = 1;
+
+  const transferInstruction = createTransferCheckedInstruction(
+    accountUsdcAddress, // source
+    usdcMintAddress, // mint
+    shopUsdcAddress, // destination
+    account, // owner of source address
+    usdcAmount * (10 ** decimals), // amount
+    decimals
+  );
 
   // Add reference as a key to the instruction
   // This allows us to listen for this transaction
