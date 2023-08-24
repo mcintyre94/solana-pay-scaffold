@@ -1,8 +1,10 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
-import { createTransferCheckedInstruction, getAssociatedTokenAddress, getAssociatedTokenAddressSync, getMint, transferChecked, transferCheckedInstructionData } from '@solana/spl-token';
-import { Cluster, clusterApiUrl, Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js'
+import { createTransferCheckedInstruction, getAssociatedTokenAddressSync, getMint } from '@solana/spl-token';
+import { Cluster, clusterApiUrl, Connection, PublicKey, Transaction, Keypair } from '@solana/web3.js'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import base58 from 'bs58'
+import { AnchorProvider, Program, web3 } from '@coral-xyz/anchor';
+
 
 type GetResponse = {
   label: string,
@@ -37,10 +39,30 @@ async function postImpl(
   account: PublicKey,
   reference: PublicKey,
   shopKeypair: Keypair,
+  pepperoni: number,
+  cheese: number,
+  mushrooms: number,
 ): Promise<PostResponse> {
   // Can also use a custom RPC here
   const endpoint = clusterApiUrl(network);
   const connection = new Connection(endpoint);
+
+  const mockWallet = {
+    signTransaction: () => Promise.reject(),
+    signAllTransactions: () => Promise.reject(),
+    publicKey: shopKeypair.publicKey,
+  };
+  const anchorProvider = new AnchorProvider(connection, mockWallet, {});
+  const programId = new PublicKey('GJk5YqJDMgTT8CFWfDZLFVnw8GXJucyTnqBcFcf2Dxcf');
+  const program = await Program.at(programId, anchorProvider);
+
+  const orderKeypair = Keypair.generate();
+  const orderInstruction = await program.methods.init(account, pepperoni, cheese, mushrooms).accountsStrict({
+    payer: shopKeypair.publicKey,
+    order: orderKeypair.publicKey,
+    rent: web3.SYSVAR_RENT_PUBKEY,
+    systemProgram: web3.SystemProgram.programId,
+  }).instruction()
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
@@ -50,9 +72,8 @@ async function postImpl(
     lastValidBlockHeight,
   });
 
-  const shopPublicKey = new PublicKey('EkMGcCfkrs4Eqrd9C4CEhPDRY2Es8SPQs6cGWiBYVKzt');
   const usdcMintAddress = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
-  const shopUsdcAddress = getAssociatedTokenAddressSync(usdcMintAddress, shopPublicKey);
+  const shopUsdcAddress = getAssociatedTokenAddressSync(usdcMintAddress, shopKeypair.publicKey);
   const accountUsdcAddress = getAssociatedTokenAddressSync(usdcMintAddress, account);
 
   const { decimals } = await getMint(connection, usdcMintAddress)
@@ -76,10 +97,10 @@ async function postImpl(
     isWritable: false,
   });
 
-  transaction.add(transferInstruction);
+  transaction.add(transferInstruction, orderInstruction);
 
-  // Partially sign as shop
-  transaction.sign(shopKeypair);
+  // Partially sign as shop and order account
+  transaction.sign(shopKeypair, orderKeypair);
 
   // Serialize the transaction and convert to base64 to return it
   const serializedTransaction = transaction.serialize({
@@ -132,6 +153,24 @@ async function post(
     return
   }
 
+  const pepperoni = getFromQuery(req, 'pepperoni');
+  if (!pepperoni) {
+    res.status(400).json({ error: 'No pepperoni provided' })
+    return
+  }
+
+  const cheese = getFromQuery(req, 'cheese');
+  if (!cheese) {
+    res.status(400).json({ error: 'No cheese provided' })
+    return
+  }
+
+  const mushrooms = getFromQuery(req, 'mushrooms');
+  if (!mushrooms) {
+    res.status(400).json({ error: 'No mushrooms provided' })
+    return
+  }
+
   const shopPrivateKey = process.env.SHOP_PRIVATE_KEY
   if (!shopPrivateKey) {
     throw new Error('SHOP_PRIVATE_KEY not set')
@@ -145,6 +184,9 @@ async function post(
       new PublicKey(account),
       new PublicKey(reference),
       shopKeypair,
+      Number(pepperoni),
+      Number(cheese),
+      Number(mushrooms)
     );
     res.status(200).json(postResponse)
   } catch (error) {
