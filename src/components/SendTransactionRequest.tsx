@@ -8,9 +8,12 @@ import { useNetworkConfiguration } from '../contexts/NetworkConfigurationProvide
 
 type SendTransactionRequestProps = {
   reference: PublicKey,
+  pepperoni: number,
+  cheese: number,
+  mushrooms: number
 };
 
-export const SendTransactionRequest: FC<SendTransactionRequestProps> = ({ reference }) => {
+export const SendTransactionRequest: FC<SendTransactionRequestProps> = ({ reference, pepperoni, cheese, mushrooms }) => {
   const { connection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
   const { networkConfiguration } = useNetworkConfiguration();
@@ -25,7 +28,7 @@ export const SendTransactionRequest: FC<SendTransactionRequestProps> = ({ refere
     let signature: TransactionSignature = '';
     try {
       // Request the transaction from transaction request API
-      const { data } = await axios.post(`/api/transaction?network=${networkConfiguration}&reference=${reference.toBase58()}`, {
+      const { data } = await axios.post(`/api/transaction?network=${networkConfiguration}&reference=${reference.toBase58()}&pepperoni=${pepperoni}&cheese=${cheese}&mushrooms=${mushrooms}`, {
         account: publicKey
       }, {
         // Don't throw for 4xx responses, we handle them
