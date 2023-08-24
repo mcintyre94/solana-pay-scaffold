@@ -2,6 +2,7 @@
 import { createTransferCheckedInstruction, getAssociatedTokenAddress, getAssociatedTokenAddressSync, getMint, transferChecked, transferCheckedInstructionData } from '@solana/spl-token';
 import { Cluster, clusterApiUrl, Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import base58 from 'bs58'
 
 type GetResponse = {
   label: string,
@@ -34,7 +35,8 @@ function get(res: NextApiResponse<GetResponse>) {
 async function postImpl(
   network: Cluster,
   account: PublicKey,
-  reference: PublicKey
+  reference: PublicKey,
+  shopKeypair: Keypair,
 ): Promise<PostResponse> {
   // Can also use a custom RPC here
   const endpoint = clusterApiUrl(network);
@@ -42,9 +44,8 @@ async function postImpl(
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
-  // Create any transaction
   const transaction = new Transaction({
-    feePayer: account,
+    feePayer: shopKeypair.publicKey, // shop is fee payer
     blockhash,
     lastValidBlockHeight,
   });
@@ -76,6 +77,9 @@ async function postImpl(
   });
 
   transaction.add(transferInstruction);
+
+  // Partially sign as shop
+  transaction.sign(shopKeypair);
 
   // Serialize the transaction and convert to base64 to return it
   const serializedTransaction = transaction.serialize({
@@ -128,11 +132,19 @@ async function post(
     return
   }
 
+  const shopPrivateKey = process.env.SHOP_PRIVATE_KEY
+  if (!shopPrivateKey) {
+    throw new Error('SHOP_PRIVATE_KEY not set')
+  }
+  // public key: Fkc4FN7PPhyGsAcHPW3dBBJ4BvtYkDr2rBFBgFpvy3nB
+  const shopKeypair = Keypair.fromSecretKey(base58.decode(shopPrivateKey))
+
   try {
     const postResponse = await postImpl(
       network,
       new PublicKey(account),
       new PublicKey(reference),
+      shopKeypair,
     );
     res.status(200).json(postResponse)
   } catch (error) {
