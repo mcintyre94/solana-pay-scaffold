@@ -12,6 +12,7 @@
   "dependencies": {
     "@coral-xyz/anchor": "^0.28.1-beta.1",
     "@heroicons/react": "^1.0.5",
+    "@metaplex-foundation/js": "^0.19.4",
     "@noble/ed25519": "^1.7.1",
     "@solana/pay": "^0.2.4",
     "@solana/spl-token": "^0.3.8",

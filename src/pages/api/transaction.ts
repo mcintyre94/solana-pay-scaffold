@@ -4,7 +4,8 @@ import { Cluster, clusterApiUrl, Connection, PublicKey, Transaction, Keypair } f
 import type { NextApiRequest, NextApiResponse } from 'next'
 import base58 from 'bs58'
 import { AnchorProvider, Program, web3 } from '@coral-xyz/anchor';
-
+import { GuestIdentityDriver, Metaplex, bundlrStorage, keypairIdentity, toMetaplexFile } from '@metaplex-foundation/js';
+import * as fs from "fs";
 
 type GetResponse = {
   label: string,
@@ -47,6 +48,63 @@ async function postImpl(
   const endpoint = clusterApiUrl(network);
   const connection = new Connection(endpoint);
 
+  // Devnet Bundlr address
+  const BUNDLR_ADDRESS = "https://devnet.bundlr.network";
+
+
+  // Initialise Metaplex with our shop keypair
+  const nfts = Metaplex
+    .make(connection)
+    .use(keypairIdentity(shopKeypair))
+    .use(
+      bundlrStorage({
+        address: BUNDLR_ADDRESS,
+        providerUrl: endpoint,
+        timeout: 60000,
+      })
+    )
+    .nfts();
+
+  const imageBuffer = fs.readFileSync('./public/pizza.svg');
+  const file = toMetaplexFile(imageBuffer, 'pizza.svg');
+
+  const { uri: metadataUri } = await nfts.uploadMetadata({
+    name: 'Pizza Slice',
+    symbol: 'PIZZA',
+    description: 'The pizza loyalty reward scheme',
+    image: file,
+    attributes: [
+      {
+        trait_type: 'Pepperoni',
+        value: pepperoni.toString()
+      },
+      {
+        trait_type: 'Cheese',
+        value: cheese.toString()
+      },
+      {
+        trait_type: 'Mushrooms',
+        value: mushrooms.toString()
+      }
+    ]
+  });
+
+  // The mint needs to sign the transaction, so we generate a new keypair for it
+  const mintKeypair = Keypair.generate()
+
+  // This is returned by nft-upload/upload.js
+  const METADATA_URI = "https://arweave.net/HGrIpvlg4VkzR64ssmM8kR8uMzPBk10S84eg8PesAKs"
+
+  // Create a transaction builder to create the NFT
+  const transactionBuilder = await nfts.builders().create({
+    uri: metadataUri, // use our metadata
+    name: 'Pizza Slice',
+    tokenOwner: account, // NFT is minted to the wallet submitting the transaction (buyer)
+    updateAuthority: shopKeypair, // we retain update authority
+    sellerFeeBasisPoints: 100, // 1% royalty
+    useNewMint: mintKeypair, // we pass our mint in as the new mint to use
+  })
+
   const mockWallet = {
     signTransaction: () => Promise.reject(),
     signAllTransactions: () => Promise.reject(),
@@ -63,14 +121,6 @@ async function postImpl(
     rent: web3.SYSVAR_RENT_PUBKEY,
     systemProgram: web3.SystemProgram.programId,
   }).instruction()
-
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-
-  const transaction = new Transaction({
-    feePayer: shopKeypair.publicKey, // shop is fee payer
-    blockhash,
-    lastValidBlockHeight,
-  });
 
   const usdcMintAddress = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
   const shopUsdcAddress = getAssociatedTokenAddressSync(usdcMintAddress, shopKeypair.publicKey);
@@ -97,10 +147,20 @@ async function postImpl(
     isWritable: false,
   });
 
-  transaction.add(transferInstruction, orderInstruction);
+  transactionBuilder.prepend({
+    instruction: transferInstruction,
+    signers: []
+  }, {
+    instruction: orderInstruction,
+    signers: []
+  });
 
-  // Partially sign as shop and order account
-  transaction.sign(shopKeypair, orderKeypair);
+  // Convert to transaction
+  const latestBlockhash = await connection.getLatestBlockhash()
+  const transaction = await transactionBuilder.toTransaction(latestBlockhash)
+
+  // Partially sign as shop, order and mint accounts
+  transaction.sign(shopKeypair, orderKeypair, mintKeypair);
 
   // Serialize the transaction and convert to base64 to return it
   const serializedTransaction = transaction.serialize({

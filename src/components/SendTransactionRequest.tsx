@@ -63,7 +63,7 @@ export const SendTransactionRequest: FC<SendTransactionRequestProps> = ({ refere
       console.error(`Transaction failed! ${error?.message}`, signature);
       return;
     }
-  }, [publicKey, networkConfiguration, reference, sendTransaction, connection]);
+  }, [publicKey, networkConfiguration, reference, sendTransaction, connection, pepperoni, cheese, mushrooms]);
 
   return (
     <div>
