@@ -14,10 +14,11 @@ export const TransferRequestQR: FC<TransferRequestQRProps> = ({ reference }) => 
     // Create a transfer request QR code
     const urlParams: TransferRequestURLFields = {
       recipient: Keypair.generate().publicKey,
-      amount: new BigNumber(1 / 1000), // amount in SOL
+      amount: new BigNumber(0.5), // amount in SOL
       reference,
       label: 'My Store',
       message: 'Thankyou for your purchase!',
+      splToken: new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'),
     };
     const solanaUrl = encodeURL(urlParams);
     const qr = createQR(solanaUrl, 512, 'transparent')

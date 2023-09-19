@@ -4,7 +4,7 @@ import { Cluster, clusterApiUrl, Connection, PublicKey, Transaction, Keypair } f
 import type { NextApiRequest, NextApiResponse } from 'next'
 import base58 from 'bs58'
 import { AnchorProvider, Program, web3 } from '@coral-xyz/anchor';
-import { GuestIdentityDriver, Metaplex, bundlrStorage, keypairIdentity, toMetaplexFile } from '@metaplex-foundation/js';
+import { Metaplex, bundlrStorage, keypairIdentity, toMetaplexFile } from '@metaplex-foundation/js';
 import * as fs from "fs";
 
 type GetResponse = {
@@ -51,7 +51,6 @@ async function postImpl(
   // Devnet Bundlr address
   const BUNDLR_ADDRESS = "https://devnet.bundlr.network";
 
-
   // Initialise Metaplex with our shop keypair
   const nfts = Metaplex
     .make(connection)
@@ -89,11 +88,10 @@ async function postImpl(
     ]
   });
 
+  console.log({ metadataUri })
+
   // The mint needs to sign the transaction, so we generate a new keypair for it
   const mintKeypair = Keypair.generate()
-
-  // This is returned by nft-upload/upload.js
-  const METADATA_URI = "https://arweave.net/HGrIpvlg4VkzR64ssmM8kR8uMzPBk10S84eg8PesAKs"
 
   // Create a transaction builder to create the NFT
   const transactionBuilder = await nfts.builders().create({
@@ -101,7 +99,7 @@ async function postImpl(
     name: 'Pizza Slice',
     tokenOwner: account, // NFT is minted to the wallet submitting the transaction (buyer)
     updateAuthority: shopKeypair, // we retain update authority
-    sellerFeeBasisPoints: 100, // 1% royalty
+    sellerFeeBasisPoints: 0, // 0% royalty
     useNewMint: mintKeypair, // we pass our mint in as the new mint to use
   })
 
