@@ -14,7 +14,7 @@ export const TransferRequestQR: FC<TransferRequestQRProps> = ({ reference }) => 
     // Create a transfer request QR code
     const urlParams: TransferRequestURLFields = {
       recipient: Keypair.generate().publicKey,
-      amount: new BigNumber(0.5), // amount in SOL
+      amount: new BigNumber(0.5), // amount in USDC
       reference,
       label: 'My Store',
       message: 'Thankyou for your purchase!',
